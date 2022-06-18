@@ -16,7 +16,6 @@ class WireMain(bpy.types.Operator):
     
     def execute(self, context):
         config = context.scene.config
-        
         # tolerence for distance in kd tree
         dist_tol = config.kd_tol
         # droop of wire, assuming positive z-up
@@ -47,7 +46,7 @@ class WireMain(bpy.types.Operator):
             mushroom_list = []
             # gets name of object without periods
             pole_name = pole_name.split('.')[0]
-            # list with tuple coordinates, order is Left, Right, Middle (Ground)
+            # list with tuple coordinates, order is Left, Right, Middle
             pole_a = [(-0.375, 1.8, 5.2441), (-0.375, -1.8, 5.2441), (-0.375, -0.55, 5.2441)]
             # if object name matches any known poles, use those coordinates
             if pole_name == 'pole_a':
@@ -91,6 +90,14 @@ class WireMain(bpy.types.Operator):
             bpy.ops.object.mode_set(mode='EDIT')
             bpy.ops.object.mode_set(mode='OBJECT')
 
+        # checks if value is in range of +- radius from origin
+        # inputs: value to check,  radius; returns true if in radius
+        def inRange(value, radius):
+            if (value <= radius) and (value >= -radius):
+                return True
+            else:
+                return False
+
         # draws wire using quadratic function to get more natural shape
         # inputs: wire name, start coordinates, end coordinates
         def parabolic_wire(w_name, start_x, start_y, start_z, end_x, end_y, end_z):
@@ -102,23 +109,34 @@ class WireMain(bpy.types.Operator):
             y_dist = (end_y - start_y)**2
             z_dist = (end_z - start_z)**2
             pole_dist = abs(math.sqrt((x_dist+y_dist+z_dist)))
-            mid_xy = abs(math.sqrt(((mid_x)**2)+((mid_y)**2)))
+            mid_xy = math.sqrt(((mid_x)**2)+((mid_y)**2))
             start_xy = math.sqrt(((start_x)**2)+((start_y)**2))
             # constant multiplier in quadratic
-            a = droop/(pole_dist*(pole_dist/4))
+            a = droop/((pole_dist**2)/4)
             p_iterator = pole_dist/w_segment
+            # pushing parabola to the left
+            p_offset = p_iterator
+            # if the midpoint is between 1 and -1 and the midpoint is major axis change midpoint
+            if inRange(mid_x, 1):
+                if (x_dist > y_dist):
+                    mid_xy += pole_dist
+                    p_offset *= 2
+            if inRange(mid_y, 1):
+                if (y_dist > x_dist):
+                    mid_xy += pole_dist
+                    p_offset *= 2
 
             x_list = []
             y_list = []
             z_list = []
-            p_dist = start_xy
+            x = start_xy
             for i in range(1, w_segment):
                 # quadratic equation; first part (before +) is quadratic, after is z-axis manipulation
-                wire_z = a*((p_dist - mid_xy + p_iterator)**2) + ((start_z+(i*((end_z-start_z)/w_segment)))-droop)
+                wire_z = a*((x - mid_xy + p_offset)**2) + ((start_z+(i*((end_z-start_z)/w_segment)))-droop)
                 x_list.append((start_x+(i*((end_x-start_x)/w_segment))))
                 y_list.append((start_y+(i*((end_y-start_y)/w_segment))))
                 z_list.append(wire_z)
-                p_dist += p_iterator
+                x += p_iterator
 
             co_list = [(start_x, start_y, start_z), (end_x, end_y, end_z)]
             ln_list = [(0, 1)]
@@ -212,7 +230,7 @@ class WireMain(bpy.types.Operator):
             # gets mushroom coordinates for start object
             mushroom_L = get_mushroom(start_pole)[0]
             mushroom_R = get_mushroom(start_pole)[1]
-            mushroom_G = get_mushroom(start_pole)[2]
+            mushroom_M = get_mushroom(start_pole)[2]
 
             # gets next object to draw wires to
             next_obj = int(selected_list.index(obj)) + 1
@@ -223,9 +241,9 @@ class WireMain(bpy.types.Operator):
                 # gets mushroom coordinates for end object
                 end_mushroom_L = get_mushroom(end_pole)[0]
                 end_mushroom_R = get_mushroom(end_pole)[1]
-                end_mushroom_G = get_mushroom(end_pole)[2]
+                end_mushroom_M = get_mushroom(end_pole)[2]
             else:
-                # if it is last object
+                # if it is last object do nothing
                 print('reached end/only one pole selected')
                 return {'PASS_THROUGH'}
             #####################################
@@ -241,9 +259,9 @@ class WireMain(bpy.types.Operator):
             #####################################
             #     finding start coordinates     #
             #####################################
-            start_G_x = find_coord(obj, kd, mushroom_G, dist_tol)[0]
-            start_G_y = find_coord(obj, kd, mushroom_G, dist_tol)[1]
-            start_G_z = find_coord(obj, kd, mushroom_G, dist_tol)[2]
+            start_M_x = find_coord(obj, kd, mushroom_M, dist_tol)[0]
+            start_M_y = find_coord(obj, kd, mushroom_M, dist_tol)[1]
+            start_M_z = find_coord(obj, kd, mushroom_M, dist_tol)[2]
 
             start_L_x = find_coord(obj, kd, mushroom_L, dist_tol)[0]
             start_L_y = find_coord(obj, kd, mushroom_L, dist_tol)[1]
@@ -265,9 +283,9 @@ class WireMain(bpy.types.Operator):
             #####################################
             #      finding end coordinates      #
             #####################################
-            end_G_x = find_coord(end_obj, end_kd, end_mushroom_G, dist_tol)[0]
-            end_G_y = find_coord(end_obj, end_kd, end_mushroom_G, dist_tol)[1]
-            end_G_z = find_coord(end_obj, end_kd, end_mushroom_G, dist_tol)[2]
+            end_M_x = find_coord(end_obj, end_kd, end_mushroom_M, dist_tol)[0]
+            end_M_y = find_coord(end_obj, end_kd, end_mushroom_M, dist_tol)[1]
+            end_M_z = find_coord(end_obj, end_kd, end_mushroom_M, dist_tol)[2]
 
             end_L_x = find_coord(end_obj, end_kd, end_mushroom_L, dist_tol)[0]
             end_L_y = find_coord(end_obj, end_kd, end_mushroom_L, dist_tol)[1]
@@ -280,18 +298,18 @@ class WireMain(bpy.types.Operator):
             #             draw wire             #
             #####################################
             # checking that creating vertices will result in wire
-            if (start_G_x != end_G_x) or (start_G_y != end_G_y) or (start_G_z != end_G_z):
+            if (start_M_x != end_M_x) or (start_M_y != end_M_y) or (start_M_z != end_M_z):
                 # if resulting in wire, create vertices and wire
                 # checks that droop is not 0
                 if (droop == 0 or w_segment <= 1):
                     # draws straight wire if droop == 0 or w_segment <= 1
-                    draw_wire('wire_gnd', start_G_x, start_G_y, start_G_z, end_G_x, end_G_y, end_G_z)
+                    draw_wire('wire_mid', start_M_x, start_M_y, start_M_z, end_M_x, end_M_y, end_M_z)
                 elif (eight_part_wire_enabled == True):
                     # draws eight-segmented wire if true
-                    eight_part_wire('wire_gnd', start_G_x, start_G_y, start_G_z, end_G_x, end_G_y, end_G_z)
+                    eight_part_wire('wire_mid', start_M_x, start_M_y, start_M_z, end_M_x, end_M_y, end_M_z)
                 else:
                     # draws parabola wire if droop != 0
-                    parabolic_wire('wire_gnd', start_G_x, start_G_y, start_G_z, end_G_x, end_G_y, end_G_z)
+                    parabolic_wire('wire_mid', start_M_x, start_M_y, start_M_z, end_M_x, end_M_y, end_M_z)
 
             if (start_L_x != end_L_x) or (start_L_y != end_L_y) or (start_L_z != end_L_z):
                 if (droop == 0 or w_segment <= 1):
